@@ -2,7 +2,6 @@
 
 Run:  streamlit run app.py   (API_BASE_URL defaults to http://127.0.0.1:8002)
 """
-import os
 from datetime import date
 
 import pandas as pd
@@ -10,25 +9,12 @@ import plotly.express as px
 import streamlit as st
 
 from services.cost_calculator import advance_renewal
-from ui_common import api_delete, api_get, api_post, api_put, money
+from ui_common import resolve_api_base_url, api_delete, api_get, api_post, api_put, money
 
 st.set_page_config(page_title="Subscription Tracker (B)", layout="wide")
 
 
-def _api_base_url(default: str) -> str:
-    """Resolve the backend URL: env var first (local runs / Render), then
-    Streamlit Community Cloud secrets (the Secrets editor is surfaced through
-    st.secrets), then the local default."""
-    value = os.getenv("API_BASE_URL")
-    if value:
-        return value
-    try:
-        return st.secrets.get("API_BASE_URL", default)
-    except Exception:  # no secrets file in a plain local run
-        return default
-
-
-API_BASE_URL = _api_base_url("http://127.0.0.1:8002")
+API_BASE_URL = resolve_api_base_url(st.secrets)
 CATEGORY_COLORS = {
     "Streaming": "#ef4444", "Music": "#10b981", "Software": "#3b82f6",
     "Fitness": "#f97316", "News": "#eab308", "Education": "#8b5cf6",
@@ -49,11 +35,12 @@ FREQUENCIES = ["weekly", "monthly", "quarterly", "yearly"]
 # ------------------------------------------------------------------ Dashboard
 if page == "Dashboard":
     st.subheader("What am I paying for?")
-    ok, totals = api_get(API_BASE_URL, "/total")
+    this_month = date.today().strftime("%Y-%m")
+    ok, totals = api_get(API_BASE_URL, "/total", params={"month": this_month})
     if not ok:
         st.error(totals)
     else:
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         if totals["currencies"]:
             monthly = totals["currencies"][0]["monthly_total"]
             yearly = totals["currencies"][0]["yearly_total"]
@@ -61,6 +48,12 @@ if page == "Dashboard":
             col1.metric(f"Monthly total ({cur})", money(monthly, cur))
             col2.metric(f"Yearly total ({cur})", money(yearly, cur))
         col3.metric("Active / Inactive", f"{totals['active_count']} / {totals['inactive_count']}")
+        due_totals = totals.get("due_in_month_totals") or []
+        due_inr = next((d for d in due_totals if d["currency"] == "INR"), None)
+        col4.metric(f"Charges due in {this_month}", money(due_inr["total"]) if due_inr else money(0),
+                    f"{due_inr['count'] if due_inr else 0} renewals", delta_color="off")
+        if len(totals["currencies"]) > 1:
+            st.caption("Totals are kept per currency; only the first currency is shown above.")
 
         if totals["by_category"]:
             df = pd.DataFrame(totals["by_category"]).rename(columns={"monthly_total": "Monthly (INR)"})
@@ -73,7 +66,9 @@ if page == "Dashboard":
             st.dataframe(df, use_container_width=True, hide_index=True)
 
         ok, renewals = api_get(API_BASE_URL, "/renewals", params={"days": 7})
-        if ok and renewals:
+        if not ok:
+            st.warning(f"Could not load upcoming renewals: {renewals}")
+        elif renewals:
             st.subheader("Renewing in the next 7 days")
             st.dataframe(
                 pd.DataFrame(renewals)[["name", "next_renewal_date", "days_until_renewal", "urgency", "monthly_cost"]],
@@ -124,6 +119,8 @@ elif page == "Manage Subscriptions":
                     if ok:
                         st.success("Subscription state updated.")
                         st.rerun()
+                    else:
+                        st.error(result)
                 if col3.button("Delete subscription"):
                     ok, result = api_delete(API_BASE_URL, f"/subscriptions/{int(sub_id)}")
                     if ok:

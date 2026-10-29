@@ -84,12 +84,35 @@ class FrequencyTotals(BaseModel):
     monthly_total: float
 
 
+class MonthCharge(BaseModel):
+    subscription_id: int
+    name: str
+    category: str
+    billing_frequency: BillingFrequency
+    charge_date: date
+    amount: float
+    currency: str
+
+
+class MonthDueTotals(BaseModel):
+    currency: str
+    count: int
+    total: float
+
+
 class TotalsOut(BaseModel):
     active_count: int
     inactive_count: int
+    # Billing-cycle-normalized run rate of ACTIVE subscriptions (independent of month).
     currencies: list[CurrencyTotals]
     by_category: list[CategoryTotals]
     by_frequency: list[FrequencyTotals]
+    # Only when ?month=YYYY-MM is given: actual charges projected to fall due
+    # in that calendar month (a yearly plan is 0 in most months and its full
+    # price in its renewal month).
+    month: Optional[str] = None
+    due_in_month: Optional[list[MonthCharge]] = None
+    due_in_month_totals: Optional[list[MonthDueTotals]] = None
 
 
 class CategoryDetail(BaseModel):

@@ -69,7 +69,7 @@ Interactive API docs: <http://127.0.0.1:8002/docs>
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `DATABASE_URL` | `sqlite:///./data/subscriptions.db` | Own SQLite file (never shared) |
+| `DATABASE_URL` | `data/subscriptions.db` (SQLite) | Own database. Relative SQLite paths resolve against this folder; `postgres://`/`postgresql://` URLs (Render Postgres) are supported |
 | `APP_PORT` | `8002` | Backend port |
 | `API_BASE_URL` (frontend) | `http://127.0.0.1:8002` | Where Streamlit finds the API |
 

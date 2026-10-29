@@ -92,9 +92,27 @@ Active subscriptions renewing within `days` (1-365), soonest first, each with
 ]
 ```
 
-### `GET /total`
+### `GET /total` and `GET /total?month=YYYY-MM`
 Monthly/yearly totals across **active** subscriptions, split per currency,
-with category and frequency breakdowns:
+with category and frequency breakdowns. These are billing-cycle-normalized
+run rates (weekly x 52/12, quarterly / 3, yearly / 12) and do not depend on
+`month`.
+
+With `?month=YYYY-MM` the response additionally contains `month`,
+`due_in_month` (each charge projected to fall due in that calendar month from
+`next_renewal_date` and the billing frequency, never before the date the
+subscription was recorded) and `due_in_month_totals` per currency. A yearly
+plan contributes its full price only in its renewal month. Invalid months
+(`2026-13`, `2026-5`) return 422. Without `month` the three fields are `null`.
+
+```json
+"month": "2026-10",
+"due_in_month": [{"subscription_id": 1, "name": "Netflix", "category": "Streaming",
+  "billing_frequency": "monthly", "charge_date": "2026-11-01", "amount": 649.0, "currency": "INR"}],
+"due_in_month_totals": [{"currency": "INR", "count": 1, "total": 649.0}]
+```
+
+Base response:
 
 ```json
 {

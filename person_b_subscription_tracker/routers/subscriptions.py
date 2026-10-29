@@ -1,6 +1,6 @@
 """Subscription CRUD + analytics endpoints for Person B."""
 from datetime import date
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -17,11 +17,14 @@ from crud import (
     update_subscription,
 )
 from database import get_db
+from services.cost_calculator import charges_in_month
 from schemas import (
     CategoryDetail,
     CategoryTotals,
     CurrencyTotals,
     FrequencyTotals,
+    MonthCharge,
+    MonthDueTotals,
     RenewalOut,
     SubscriptionCreate,
     SubscriptionOut,
@@ -54,7 +57,7 @@ def create_subscription_endpoint(payload: SubscriptionCreate, db: Session = Depe
 def list_subscriptions_endpoint(
     active: Optional[bool] = Query(default=None),
     category: Optional[str] = Query(default=None, max_length=60),
-    frequency: Optional[str] = Query(default=None),
+    frequency: Optional[Literal["weekly", "monthly", "quarterly", "yearly"]] = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -109,8 +112,19 @@ def renewals_endpoint(
 
 
 @analytics.get("/total", response_model=TotalsOut)
-def totals_endpoint(db: Session = Depends(get_db)):
-    """Monthly / yearly cost totals across active subscriptions, split by currency."""
+def totals_endpoint(
+    month: Optional[str] = Query(
+        default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$",
+        description="Optional YYYY-MM: also list the charges projected to fall due in that month",
+    ),
+    db: Session = Depends(get_db),
+):
+    """Monthly / yearly cost totals across active subscriptions, split by currency.
+
+    With `month`, the response also carries `due_in_month`: the renewals of
+    active subscriptions projected into that calendar month from each
+    next_renewal_date and billing frequency.
+    """
     active, inactive = counts(db)
     currency_totals: dict[str, dict[str, float]] = {}
     by_category: dict[tuple[str, str], dict] = {}
@@ -131,9 +145,37 @@ def totals_endpoint(db: Session = Depends(get_db)):
         entry["count"] += 1
         entry["monthly_total"] += subscription.monthly_cost
 
+    due: Optional[list[MonthCharge]] = None
+    due_totals: Optional[list[MonthDueTotals]] = None
+    if month:
+        due = []
+        for subscription in all_active(db):
+            for when in charges_in_month(
+                subscription.next_renewal_date, subscription.billing_frequency, month,
+                not_before=subscription.created_at.date() if subscription.created_at else None,
+            ):
+                due.append(MonthCharge(
+                    subscription_id=subscription.id, name=subscription.name, category=subscription.category,
+                    billing_frequency=subscription.billing_frequency, charge_date=when,
+                    amount=round(subscription.amount, 2), currency=subscription.currency,
+                ))
+        due.sort(key=lambda charge: (charge.charge_date, charge.subscription_id))
+        per_currency: dict[str, dict] = {}
+        for charge in due:
+            bucket = per_currency.setdefault(charge.currency, {"count": 0, "total": 0.0})
+            bucket["count"] += 1
+            bucket["total"] += charge.amount
+        due_totals = [
+            MonthDueTotals(currency=cur, count=v["count"], total=round(v["total"], 2))
+            for cur, v in sorted(per_currency.items())
+        ]
+
     return TotalsOut(
         active_count=active,
         inactive_count=inactive,
+        month=month,
+        due_in_month=due,
+        due_in_month_totals=due_totals,
         currencies=[
             CurrencyTotals(currency=cur, monthly_total=round(v["monthly_total"], 2), yearly_total=round(v["yearly_total"], 2))
             for cur, v in sorted(currency_totals.items())
