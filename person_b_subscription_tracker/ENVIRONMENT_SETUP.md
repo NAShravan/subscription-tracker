@@ -78,7 +78,7 @@ streamlit run app.py
 | A - Expense & Budget | 8001 | 8501 |
 
 Start backends in separate terminals (see each app's setup guide), then in
-Person A's `.env` point `INTEGRATION_B_BASE_URL=http://127.0.0.1:8002`.
+Person A's `.env` point `SUBSCRIPTION_API_URL=http://127.0.0.1:8002`.
 A's **Integrations** page will show this app as `available` and its sync will
 import active subscriptions as monthly expenses.
 

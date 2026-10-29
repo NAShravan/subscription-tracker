@@ -45,7 +45,7 @@ Status legend: `[x]` done with evidence - `[!]` done but flagged / unverified -
 
 ## Quality assurance
 
-- [x] 10 pytest tests pass - `tests/` (`python -m pytest -q` -> `10 passed`)
+- [x] 20 pytest tests pass - `tests/` (`python -m pytest -q` -> `20 passed`)
 - [x] Frequency math tested for all four frequencies (649/649, 12000/yr -> 1000/mo, 1500/qtr -> 500/mo, 100/wk -> 433.33/mo)
 - [x] Validation tests: bad frequency 422, zero amount 422
 - [x] Renewal window + urgency + overdue handling + sorting order

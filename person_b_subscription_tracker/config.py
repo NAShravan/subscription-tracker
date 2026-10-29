@@ -16,7 +16,7 @@ def _get_int(name: str, default: int) -> int:
 class Settings:
     service_name: str = os.getenv("SERVICE_NAME", "subscription-cost-tracker")
     service_owner: str = "Person B - Shravan N A (23MID0445)"
-    version: str = "1.0.0"
+    version: str = "1.1.0"
     app_port: int = _get_int("APP_PORT", 8002)
     contract_version: str = "1.0"  # version of /integration/export payload
 
